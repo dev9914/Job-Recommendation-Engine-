@@ -271,6 +271,64 @@ Empty array (`[]`) is returned for a candidate with no qualifying jobs — **not
 
 ---
 
+### 6. Get Candidate Recommendations for a Job
+
+```
+GET /jobs/:id/recommendations?limit=N&skillsWeight=50&experienceWeight=20&locationWeight=15&salaryWeight=15
+```
+
+**Query params** (all optional — partial overrides allowed)
+
+| Param | Default | Description |
+|---|---|---|
+| `limit` | `10` | Max results returned. Must be a positive integer; invalid values fall back to 10. |
+| `skillsWeight` | `50` | Override the skills dimension weight. Must be a positive number; invalid values fall back to 50. |
+| `experienceWeight` | `20` | Override the experience dimension weight. Must be a positive number; invalid values fall back to 20. |
+| `locationWeight` | `15` | Override the location dimension weight. Must be a positive number; invalid values fall back to 15. |
+| `salaryWeight` | `15` | Override the salary dimension weight. Must be a positive number; invalid values fall back to 15. |
+
+Any weight that is omitted, zero, negative, or non-numeric silently reverts to its `DEFAULT_WEIGHTS` value — partial overrides are fully supported (e.g. pass only `?experienceWeight=35` to prioritize seniority and keep 50/15/15 defaults).
+
+**What it does**
+
+1. Load job by `:id` → 404 if missing.
+2. Pull **all** candidates from the repository.
+3. Score each candidate against the job using the [scoring formula](#scoring-formula).
+4. **Drop** any candidate with `eligible: false` (must-have skill filter fail).
+5. Sort remaining by `totalScore` **descending**.
+6. Slice to `limit`.
+
+**Response — 200 OK**
+
+```json
+[
+  {
+    "candidate": {
+      "id": "2cf5c9f7-…",
+      "name": "Alice Chen",
+      "skills": ["TypeScript", "Node.js", "PostgreSQL"],
+      "yearsOfExperience": 6,
+      "location": "New York",
+      "expectedSalary": 130000
+    },
+    "score": {
+      "totalScore": 93,
+      "breakdown": {
+        "skills":     43,
+        "experience": 20,
+        "location":   15,
+        "salary":      15
+      },
+      "eligible": true
+    }
+  }
+]
+```
+
+Empty array (`[]`) is returned for a job with no qualifying candidates — **not** a 404.
+
+---
+
 ## Scoring Formula
 
 All scoring lives in `src/services/scoringService.ts` as small, composable, **pure** functions. No side effects, no I/O, no hidden state — fully deterministic and unit-testable (10 Jest cases, all passing).
@@ -342,7 +400,7 @@ Weights are overrideable per-request via query params on `/recommendations`.
 2. **Pagination, not `limit`** — Cursor-based pagination (`after`, `first`) for recommendations; avoid a hard 10-item ceiling on large result sets.
 3. **Proper validation layer** — Replace the ad-hoc `validateCandidateInput`/`validateJobInput` functions with `zod` schemas: tighter, reusable, and automatically typed (`z.infer<typeof schema>`).
 4. **Authentication + authorization** — JWT auth middleware; distinguish recruiter vs. candidate roles so only a candidate (or their recruiter) can view `/recommendations` for that candidate's ID.
-5. **Candidate→job and job→candidate matching as a single engine module** — Right now we only score "candidate for a job." A real system runs the reverse too (find candidates for a newly posted job) and should share 100% of the scoring code.
+5. **Rate limiting + abuse mitigation** — Sliding-window rate limits per IP (and per authenticated user, once auth ships) on both recommendation endpoints to protect the O(n) scoring loop against burst traffic; return `429 Too Many Requests` with `Retry-After` and surface blocked-request counts as a metric.
 6. **Telemetry + observability** — `pino` structured logs, Prometheus-style metrics (scoring latency, recommendation set size, filter-out rate per dimension), request IDs propagated via `AsyncLocalStorage`.
 7. **Seed script + contract tests** — A `scripts/seed.ts` that loads realistic sample data; contract tests (`supertest`) round-tripping each endpoint end-to-end (not just the pure scoring unit tests).
 8. **Skill normalization + fuzzy matching** — Levenshtein/synonym resolution over a canonical skill ontology. Same for location via Google Maps / Mapbox geocoding.
@@ -350,7 +408,6 @@ Weights are overrideable per-request via query params on `/recommendations`.
 10. **Score explainability layer** — Translate the `breakdown` object into one-line human reasons per recommendation, e.g. `+50 skills (excellent match) · -10 experience (junior for the role) · +10 remote-friendly location`.
 
 ---
-
 ## AI Tool Usage
 
-<!-- placeholder — to be filled in by the author -->
+I used TRAE with GPT-5.4 Beta as a coding assistant throughout this project. It helped with the initial project scaffolding and configuration, drafted the scoring service logic from the matching rules I provided, and generated most of the scoring test cases for the required formulas and edge cases. It also helped me draft and structure this README documentation. I did not treat the generated output as final; I reviewed the code against the assessment requirements, made changes where needed, and verified the behaviour through tests and builds. For example, I specifically reviewed the scoring logic to ensure that a missing must-have skill is treated as a hard eligibility filter and immediately produces a zero score, rather than allowing other matching factors to compensate for it. I also cross-checked the generated test cases against the exact scoring formulas and edge cases, and manually verified details such as input validation, route ordering, result sorting, recommendation limits, and partial scoring-weight overrides.
