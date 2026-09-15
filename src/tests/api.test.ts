@@ -4,10 +4,18 @@ import { app } from '../app';
 import { Candidate, Job } from '../models';
 import { candidateRepository, jobRepository } from '../repositories';
 
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is required to run API integration tests. ' +
+      'Make sure PostgreSQL is running via `docker compose up` first, ' +
+      'then run: npm run test:api'
+  );
+}
+
 describe('API Integration Tests', () => {
-  beforeEach(() => {
-    candidateRepository.clear();
-    jobRepository.clear();
+  beforeEach(async () => {
+    await candidateRepository.clear();
+    await jobRepository.clear();
   });
 
   describe('POST /candidates', () => {
@@ -37,6 +45,7 @@ describe('API Integration Tests', () => {
 
     it('returns 400 when yearsOfExperience is missing', async () => {
       const { yearsOfExperience: _ignored, ...withoutYears } = validCandidate;
+      void _ignored;
 
       const response = await request(app)
         .post('/candidates')
@@ -97,7 +106,7 @@ describe('API Integration Tests', () => {
 
   describe('GET /candidates/:id', () => {
     it('returns 200 with the candidate for an existing id', async () => {
-      const created = candidateRepository.create({
+      const created = await candidateRepository.create({
         name: 'Bob',
         skills: ['Python'],
         yearsOfExperience: 3,
@@ -113,7 +122,7 @@ describe('API Integration Tests', () => {
     });
 
     it('returns 404 for a non-existent candidate id', async () => {
-      const response = await request(app).get('/candidates/non-existent-id');
+      const response = await request(app).get('/candidates/00000000-0000-0000-0000-000000000001');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Candidate not found');
@@ -122,7 +131,7 @@ describe('API Integration Tests', () => {
 
   describe('GET /jobs/:id', () => {
     it('returns 200 with the job for an existing id', async () => {
-      const created = jobRepository.create({
+      const created = await jobRepository.create({
         title: 'Data Scientist',
         requiredSkills: [{ name: 'Python', mustHave: true }],
         minYearsExperience: 2,
@@ -139,7 +148,7 @@ describe('API Integration Tests', () => {
     });
 
     it('returns 404 for a non-existent job id', async () => {
-      const response = await request(app).get('/jobs/non-existent-id');
+      const response = await request(app).get('/jobs/00000000-0000-0000-0000-000000000002');
 
       expect(response.status).toBe(404);
       expect(response.body.error).toBe('Job not found');
@@ -156,9 +165,9 @@ describe('API Integration Tests', () => {
     };
 
     it('returns jobs sorted descending by totalScore', async () => {
-      const candidate = candidateRepository.create({ ...baseCandidate });
+      const candidate = await candidateRepository.create({ ...baseCandidate });
 
-      const perfectJob = jobRepository.create({
+      const perfectJob = await jobRepository.create({
         title: 'Perfect Match',
         requiredSkills: [{ name: 'TypeScript', mustHave: true }],
         minYearsExperience: 5,
@@ -167,7 +176,7 @@ describe('API Integration Tests', () => {
         remoteAllowed: false,
       } as Omit<Job, 'id'>);
 
-      const decentJob = jobRepository.create({
+      const decentJob = await jobRepository.create({
         title: 'Decent Match',
         requiredSkills: [{ name: 'TypeScript', mustHave: true }],
         minYearsExperience: 5,
@@ -192,10 +201,10 @@ describe('API Integration Tests', () => {
     });
 
     it('respects the ?limit= query parameter', async () => {
-      const candidate = candidateRepository.create({ ...baseCandidate });
+      const candidate = await candidateRepository.create({ ...baseCandidate });
 
       for (let i = 0; i < 5; i++) {
-        jobRepository.create({
+        await jobRepository.create({
           title: `Job ${i}`,
           requiredSkills: [{ name: 'TypeScript', mustHave: true }],
           minYearsExperience: 0,
@@ -214,12 +223,12 @@ describe('API Integration Tests', () => {
     });
 
     it('excludes ineligible jobs (missing must-have skill -> score 0 not returned)', async () => {
-      const candidate = candidateRepository.create({
+      const candidate = await candidateRepository.create({
         ...baseCandidate,
         skills: ['TypeScript'],
       });
 
-      const eligibleJob = jobRepository.create({
+      const eligibleJob = await jobRepository.create({
         title: 'Eligible',
         requiredSkills: [{ name: 'TypeScript', mustHave: true }],
         minYearsExperience: 0,
@@ -228,7 +237,7 @@ describe('API Integration Tests', () => {
         remoteAllowed: false,
       } as Omit<Job, 'id'>);
 
-      jobRepository.create({
+      await jobRepository.create({
         title: 'Ineligible — Missing Must-Have',
         requiredSkills: [
           { name: 'TypeScript', mustHave: true },
@@ -263,9 +272,9 @@ describe('API Integration Tests', () => {
     };
 
     it('returns candidates sorted descending by totalScore', async () => {
-      const job = jobRepository.create({ ...baseJob });
+      const job = await jobRepository.create({ ...baseJob });
 
-      const perfectCandidate = candidateRepository.create({
+      const perfectCandidate = await candidateRepository.create({
         name: 'Perfect',
         skills: ['TypeScript', 'Node'],
         yearsOfExperience: 5,
@@ -273,7 +282,7 @@ describe('API Integration Tests', () => {
         expectedSalary: 80000,
       } as Omit<Candidate, 'id'>);
 
-      const weakerCandidate = candidateRepository.create({
+      const weakerCandidate = await candidateRepository.create({
         name: 'Weaker',
         skills: ['TypeScript'],
         yearsOfExperience: 3,
@@ -297,10 +306,10 @@ describe('API Integration Tests', () => {
     });
 
     it('respects the ?limit= query parameter', async () => {
-      const job = jobRepository.create({ ...baseJob });
+      const job = await jobRepository.create({ ...baseJob });
 
       for (let i = 0; i < 5; i++) {
-        candidateRepository.create({
+        await candidateRepository.create({
           name: `Candidate ${i}`,
           skills: ['TypeScript'],
           yearsOfExperience: 5,
@@ -318,7 +327,7 @@ describe('API Integration Tests', () => {
     });
 
     it('excludes ineligible candidates (missing must-have skill)', async () => {
-      const job = jobRepository.create({
+      const job = await jobRepository.create({
         ...baseJob,
         requiredSkills: [
           { name: 'TypeScript', mustHave: true },
@@ -326,7 +335,7 @@ describe('API Integration Tests', () => {
         ],
       });
 
-      const eligibleCandidate = candidateRepository.create({
+      const eligibleCandidate = await candidateRepository.create({
         name: 'Eligible',
         skills: ['TypeScript', 'Rust'],
         yearsOfExperience: 5,
@@ -334,7 +343,7 @@ describe('API Integration Tests', () => {
         expectedSalary: 90000,
       } as Omit<Candidate, 'id'>);
 
-      candidateRepository.create({
+      await candidateRepository.create({
         name: 'Ineligible',
         skills: ['TypeScript'],
         yearsOfExperience: 5,

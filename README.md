@@ -1,6 +1,6 @@
 # Job Recommendation Engine
 
-A transparent, rule-based Job Recommendation Engine & REST API built to match candidates with roles based on skills, experience, location, and salary fit. Pure-function scoring layer, in-memory repository persistence, Express-based HTTP layer. Designed for auditability — every recommendation ships with a fully numeric, dimension-level score breakdown.
+A transparent, rule-based Job Recommendation Engine & REST API built to match candidates with roles based on skills, experience, location, and salary fit. Pure-function scoring layer, PostgreSQL-backed repository persistence, Express-based HTTP layer. Designed for auditability — every recommendation ships with a fully numeric, dimension-level score breakdown.
 
 ## Tech Stack
 
@@ -47,8 +47,43 @@ npm start         # node dist/index.js
 ### Run the test suite
 
 ```bash
-npm test                                   # full suite
-npm test -- --testPathPattern=scoringService   # scoring tests only (10 cases)
+npm test                          # full suite (API tests require a running PostgreSQL instance)
+npm run test:scoring             # scoring tests only (10 cases, no DB needed)
+```
+
+### Run with Docker Compose (PostgreSQL + API)
+
+The full stack — PostgreSQL, migrations, and the API — runs on any machine with Docker installed. No `.env` file or cloud database is required.
+
+```bash
+docker compose up --build
+```
+
+What this does:
+1. Starts a `postgres:16-alpine` container and creates the `jobmatch` database.
+2. Waits for PostgreSQL to pass its health check (`pg_isready`) before starting the API.
+3. Builds the API image (multi-stage Dockerfile — builder + slim alpine runtime).
+4. Runs `npm run migrate` against the PostgreSQL container (creates `candidates` and `jobs` tables).
+5. Starts the API on **http://localhost:3000**.
+
+PostgreSQL data is persisted in a named Docker volume (`postgres_data`) and survives API container restarts.
+
+### Run API integration tests against Dockerized PostgreSQL
+
+The API integration tests require a live PostgreSQL instance. They must be run **after** `docker compose up` has started the database (the API container itself is not required — only PostgreSQL on port `5432`).
+
+```bash
+docker compose up -d postgres          # start DB only (faster)
+# or: docker compose up --build        # start the full stack
+npm run test:api
+```
+
+`npm run test:api` automatically sets `DATABASE_URL=postgres://postgres:postgres@localhost:5432/jobmatch` (cross-platform via `cross-env`). If `DATABASE_URL` is missing or PostgreSQL isn't reachable, the tests fail with an explicit error message instead of silently skipping.
+
+You can also run the scoring unit tests in isolation (no database needed) at any time:
+
+```bash
+npm run test:scoring
 ```
 
 ### Lint
@@ -385,7 +420,7 @@ Weights are overrideable per-request via query params on `/recommendations`.
 ## Assumptions Made
 
 1. **Skill-name matching is case-insensitive, whitespace-exact.** We lowercase both sides but don't alias synonyms (e.g. `"Node"` ≠ `"Node.js"`). For a real system, a skill-taxonomy/normalization layer would precede scoring.
-2. **Repositories are in-memory `Map`s.** No persistence across restarts, no concurrency control. Perfect for a demo; a real system plugs in Prisma/Mongoose/etc. behind the same repository interface.
+2. **Persistence is PostgreSQL-backed.** Candidates and jobs are persisted in PostgreSQL. Locally, Docker Compose provisions PostgreSQL with a named volume, surviving container restarts. The repository interface (create / getById / getAll) hides the database implementation from callers — the same public surface that previously backed the in-memory implementation with no controller or scoring code.
 3. **`location` is a free-form string.** No geocoding, no regional aliases (e.g. `"NYC"` vs `"New York"` are different). The 2/3-remote fallback alleviates this somewhat but it's a known simplification.
 4. **Salary currency is implicit, single currency, no time-scaling.** Assumes all candidates and jobs share one currency (USD implicitly) and that `expectedSalary` and `salaryRange` are in the same units/period (e.g. annual).
 5. **`totalScore` rounds once at the end only.** Sub-scores remain floats in the `breakdown` object — callers can show fractional scores if desired; the integer `totalScore` is only for ordinal ranking.
@@ -396,7 +431,7 @@ Weights are overrideable per-request via query params on `/recommendations`.
 
 ## What I'd Do Differently With More Time
 
-1. **Persistent storage + migrations** — Swap the in-memory repositories for Prisma + PostgreSQL (same interface, concrete implementation), with `supabase db diff` / `prisma migrate` for versioned schema changes.
+1. **Database optimization and indexing** — Add appropriate indexes for frequently queried fields and optimize recommendation queries as the dataset grows.
 2. **Pagination, not `limit`** — Cursor-based pagination (`after`, `first`) for recommendations; avoid a hard 10-item ceiling on large result sets.
 3. **Proper validation layer** — Replace the ad-hoc `validateCandidateInput`/`validateJobInput` functions with `zod` schemas: tighter, reusable, and automatically typed (`z.infer<typeof schema>`).
 4. **Authentication + authorization** — JWT auth middleware; distinguish recruiter vs. candidate roles so only a candidate (or their recruiter) can view `/recommendations` for that candidate's ID.

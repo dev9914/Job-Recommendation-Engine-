@@ -58,7 +58,7 @@ function validateCandidateInput(body: unknown): ValidationError[] {
   return errors;
 }
 
-export function createCandidate(request: Request, response: Response): void {
+export async function createCandidate(request: Request, response: Response): Promise<void> {
   const errors = validateCandidateInput(request.body);
 
   if (errors.length > 0) {
@@ -68,7 +68,7 @@ export function createCandidate(request: Request, response: Response): void {
 
   const body = request.body as Omit<Candidate, 'id'>;
 
-  const candidate = candidateRepository.create({
+  const candidate = await candidateRepository.create({
     name: body.name.trim(),
     skills: body.skills,
     yearsOfExperience: body.yearsOfExperience,
@@ -79,9 +79,9 @@ export function createCandidate(request: Request, response: Response): void {
   response.status(201).json(candidate);
 }
 
-export function getCandidateById(request: Request, response: Response): void {
+export async function getCandidateById(request: Request, response: Response): Promise<void> {
   const id = request.params.id as string;
-  const candidate = candidateRepository.getById(id);
+  const candidate = await candidateRepository.getById(id);
 
   if (!candidate) {
     response.status(404).json({ error: 'Candidate not found' });

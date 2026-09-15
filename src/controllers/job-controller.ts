@@ -94,7 +94,7 @@ function validateJobInput(body: unknown): ValidationError[] {
   return errors;
 }
 
-export function createJob(request: Request, response: Response): void {
+export async function createJob(request: Request, response: Response): Promise<void> {
   const errors = validateJobInput(request.body);
 
   if (errors.length > 0) {
@@ -104,7 +104,7 @@ export function createJob(request: Request, response: Response): void {
 
   const body = request.body as Omit<Job, 'id'>;
 
-  const job = jobRepository.create({
+  const job = await jobRepository.create({
     title: body.title.trim(),
     requiredSkills: body.requiredSkills,
     minYearsExperience: body.minYearsExperience,
@@ -119,9 +119,9 @@ export function createJob(request: Request, response: Response): void {
   response.status(201).json(job);
 }
 
-export function getJobById(request: Request, response: Response): void {
+export async function getJobById(request: Request, response: Response): Promise<void> {
   const id = request.params.id as string;
-  const job = jobRepository.getById(id);
+  const job = await jobRepository.getById(id);
 
   if (!job) {
     response.status(404).json({ error: 'Job not found' });

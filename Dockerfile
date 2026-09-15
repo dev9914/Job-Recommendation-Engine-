@@ -16,10 +16,12 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV MIGRATIONS_DIR=/app/src/db/migrations
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+COPY src/db/migrations ./src/db/migrations
 COPY --from=builder /app/dist ./dist
 
 EXPOSE ${PORT}

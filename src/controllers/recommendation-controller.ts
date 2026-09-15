@@ -52,9 +52,9 @@ function parseWeights(query: Record<string, unknown>): Weights {
   return weights;
 }
 
-export function getCandidateRecommendations(request: Request, response: Response): void {
+export async function getCandidateRecommendations(request: Request, response: Response): Promise<void> {
   const id = request.params.id as string;
-  const candidate = candidateRepository.getById(id);
+  const candidate = await candidateRepository.getById(id);
 
   if (!candidate) {
     response.status(404).json({ error: 'Candidate not found' });
@@ -64,7 +64,7 @@ export function getCandidateRecommendations(request: Request, response: Response
   const limit = parseLimit(request.query.limit);
   const weights = parseWeights(request.query as Record<string, unknown>);
 
-  const allJobs = jobRepository.getAll();
+  const allJobs = await jobRepository.getAll();
 
   const scored: JobWithScore[] = [];
 
@@ -88,9 +88,9 @@ export function getCandidateRecommendations(request: Request, response: Response
   response.json(limited);
 }
 
-export function getJobRecommendations(request: Request, response: Response): void {
+export async function getJobRecommendations(request: Request, response: Response): Promise<void> {
   const id = request.params.id as string;
-  const job = jobRepository.getById(id);
+  const job = await jobRepository.getById(id);
 
   if (!job) {
     response.status(404).json({ error: 'Job not found' });
@@ -100,7 +100,7 @@ export function getJobRecommendations(request: Request, response: Response): voi
   const limit = parseLimit(request.query.limit);
   const weights = parseWeights(request.query as Record<string, unknown>);
 
-  const allCandidates = candidateRepository.getAll();
+  const allCandidates = await candidateRepository.getAll();
 
   const scored: CandidateWithScore[] = [];
 
