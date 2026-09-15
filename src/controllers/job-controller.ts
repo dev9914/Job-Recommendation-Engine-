@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 
 import { Job } from '../models';
 import { jobRepository } from '../repositories';
@@ -94,39 +94,55 @@ function validateJobInput(body: unknown): ValidationError[] {
   return errors;
 }
 
-export async function createJob(request: Request, response: Response): Promise<void> {
-  const errors = validateJobInput(request.body);
+export async function createJob(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const errors = validateJobInput(request.body);
 
-  if (errors.length > 0) {
-    response.status(400).json({ errors });
-    return;
+    if (errors.length > 0) {
+      response.status(400).json({ errors });
+      return;
+    }
+
+    const body = request.body as Omit<Job, 'id'>;
+
+    const job = await jobRepository.create({
+      title: body.title.trim(),
+      requiredSkills: body.requiredSkills,
+      minYearsExperience: body.minYearsExperience,
+      location: body.location.trim(),
+      salaryRange: {
+        min: body.salaryRange.min,
+        max: body.salaryRange.max,
+      },
+      remoteAllowed: body.remoteAllowed,
+    });
+
+    response.status(201).json(job);
+  } catch (err) {
+    next(err);
   }
-
-  const body = request.body as Omit<Job, 'id'>;
-
-  const job = await jobRepository.create({
-    title: body.title.trim(),
-    requiredSkills: body.requiredSkills,
-    minYearsExperience: body.minYearsExperience,
-    location: body.location.trim(),
-    salaryRange: {
-      min: body.salaryRange.min,
-      max: body.salaryRange.max,
-    },
-    remoteAllowed: body.remoteAllowed,
-  });
-
-  response.status(201).json(job);
 }
 
-export async function getJobById(request: Request, response: Response): Promise<void> {
-  const id = request.params.id as string;
-  const job = await jobRepository.getById(id);
+export async function getJobById(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = request.params.id as string;
+    const job = await jobRepository.getById(id);
 
-  if (!job) {
-    response.status(404).json({ error: 'Job not found' });
-    return;
+    if (!job) {
+      response.status(404).json({ error: 'Job not found' });
+      return;
+    }
+
+    response.json(job);
+  } catch (err) {
+    next(err);
   }
-
-  response.json(job);
 }

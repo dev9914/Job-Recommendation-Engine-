@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 
 import { Candidate } from '../models';
 import { candidateRepository } from '../repositories';
@@ -58,35 +58,51 @@ function validateCandidateInput(body: unknown): ValidationError[] {
   return errors;
 }
 
-export async function createCandidate(request: Request, response: Response): Promise<void> {
-  const errors = validateCandidateInput(request.body);
+export async function createCandidate(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const errors = validateCandidateInput(request.body);
 
-  if (errors.length > 0) {
-    response.status(400).json({ errors });
-    return;
+    if (errors.length > 0) {
+      response.status(400).json({ errors });
+      return;
+    }
+
+    const body = request.body as Omit<Candidate, 'id'>;
+
+    const candidate = await candidateRepository.create({
+      name: body.name.trim(),
+      skills: body.skills,
+      yearsOfExperience: body.yearsOfExperience,
+      location: body.location.trim(),
+      expectedSalary: body.expectedSalary,
+    });
+
+    response.status(201).json(candidate);
+  } catch (err) {
+    next(err);
   }
-
-  const body = request.body as Omit<Candidate, 'id'>;
-
-  const candidate = await candidateRepository.create({
-    name: body.name.trim(),
-    skills: body.skills,
-    yearsOfExperience: body.yearsOfExperience,
-    location: body.location.trim(),
-    expectedSalary: body.expectedSalary,
-  });
-
-  response.status(201).json(candidate);
 }
 
-export async function getCandidateById(request: Request, response: Response): Promise<void> {
-  const id = request.params.id as string;
-  const candidate = await candidateRepository.getById(id);
+export async function getCandidateById(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = request.params.id as string;
+    const candidate = await candidateRepository.getById(id);
 
-  if (!candidate) {
-    response.status(404).json({ error: 'Candidate not found' });
-    return;
+    if (!candidate) {
+      response.status(404).json({ error: 'Candidate not found' });
+      return;
+    }
+
+    response.json(candidate);
+  } catch (err) {
+    next(err);
   }
-
-  response.json(candidate);
 }

@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 
 import { Candidate, Job } from '../models';
 import { candidateRepository, jobRepository } from '../repositories';
@@ -52,74 +52,90 @@ function parseWeights(query: Record<string, unknown>): Weights {
   return weights;
 }
 
-export async function getCandidateRecommendations(request: Request, response: Response): Promise<void> {
-  const id = request.params.id as string;
-  const candidate = await candidateRepository.getById(id);
+export async function getCandidateRecommendations(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = request.params.id as string;
+    const candidate = await candidateRepository.getById(id);
 
-  if (!candidate) {
-    response.status(404).json({ error: 'Candidate not found' });
-    return;
-  }
-
-  const limit = parseLimit(request.query.limit);
-  const weights = parseWeights(request.query as Record<string, unknown>);
-
-  const allJobs = await jobRepository.getAll();
-
-  const scored: JobWithScore[] = [];
-
-  for (const job of allJobs) {
-    const scoreResult = scoreJobForCandidate(candidate, job, weights);
-
-    if (!scoreResult.eligible) {
-      continue;
+    if (!candidate) {
+      response.status(404).json({ error: 'Candidate not found' });
+      return;
     }
 
-    scored.push({
-      job,
-      score: scoreResult,
-    });
+    const limit = parseLimit(request.query.limit);
+    const weights = parseWeights(request.query as Record<string, unknown>);
+
+    const allJobs = await jobRepository.getAll();
+
+    const scored: JobWithScore[] = [];
+
+    for (const job of allJobs) {
+      const scoreResult = scoreJobForCandidate(candidate, job, weights);
+
+      if (!scoreResult.eligible) {
+        continue;
+      }
+
+      scored.push({
+        job,
+        score: scoreResult,
+      });
+    }
+
+    scored.sort((a, b) => b.score.totalScore - a.score.totalScore);
+
+    const limited = scored.slice(0, limit);
+
+    response.json(limited);
+  } catch (err) {
+    next(err);
   }
-
-  scored.sort((a, b) => b.score.totalScore - a.score.totalScore);
-
-  const limited = scored.slice(0, limit);
-
-  response.json(limited);
 }
 
-export async function getJobRecommendations(request: Request, response: Response): Promise<void> {
-  const id = request.params.id as string;
-  const job = await jobRepository.getById(id);
+export async function getJobRecommendations(
+  request: Request,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const id = request.params.id as string;
+    const job = await jobRepository.getById(id);
 
-  if (!job) {
-    response.status(404).json({ error: 'Job not found' });
-    return;
-  }
-
-  const limit = parseLimit(request.query.limit);
-  const weights = parseWeights(request.query as Record<string, unknown>);
-
-  const allCandidates = await candidateRepository.getAll();
-
-  const scored: CandidateWithScore[] = [];
-
-  for (const candidate of allCandidates) {
-    const scoreResult = scoreJobForCandidate(candidate, job, weights);
-
-    if (!scoreResult.eligible) {
-      continue;
+    if (!job) {
+      response.status(404).json({ error: 'Job not found' });
+      return;
     }
 
-    scored.push({
-      candidate,
-      score: scoreResult,
-    });
+    const limit = parseLimit(request.query.limit);
+    const weights = parseWeights(request.query as Record<string, unknown>);
+
+    const allCandidates = await candidateRepository.getAll();
+
+    const scored: CandidateWithScore[] = [];
+
+    for (const candidate of allCandidates) {
+      const scoreResult = scoreJobForCandidate(candidate, job, weights);
+
+      if (!scoreResult.eligible) {
+        continue;
+      }
+
+      scored.push({
+        candidate,
+        score: scoreResult,
+      });
+    }
+
+    scored.sort((a, b) => b.score.totalScore - a.score.totalScore);
+
+    const limited = scored.slice(0, limit);
+
+    response.json(limited);
+  } catch (err) {
+    next(err);
   }
-
-  scored.sort((a, b) => b.score.totalScore - a.score.totalScore);
-
-  const limited = scored.slice(0, limit);
-
-  response.json(limited);
 }

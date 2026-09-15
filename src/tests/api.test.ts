@@ -3,6 +3,7 @@ import request from 'supertest';
 import { app } from '../app';
 import { Candidate, Job } from '../models';
 import { candidateRepository, jobRepository } from '../repositories';
+import { pool } from '../db/pool';
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -357,6 +358,42 @@ describe('API Integration Tests', () => {
       expect(response.body.length).toBe(1);
       expect(response.body[0].candidate.id).toBe(eligibleCandidate.id);
       expect(response.body[0].score.eligible).toBe(true);
+    });
+  });
+
+  describe('Global Error Handling', () => {
+    it('returns 500 JSON error when database is unreachable instead of dropping connection', async () => {
+      const originalDbUrl = process.env.DATABASE_URL;
+      const originalError = console.error;
+      const poolAny = pool as unknown as { query: jest.Mock };
+      const originalQuery = poolAny.query;
+      console.error = jest.fn();
+
+      try {
+        process.env.DATABASE_URL = 'postgres://postgres:postgres@192.0.2.1:5432/unreachable';
+
+        const connectionError = new Error('connect ECONNREFUSED 192.0.2.1:5432');
+        poolAny.query = jest.fn().mockRejectedValue(connectionError);
+
+        let networkError: unknown = null;
+        let response: request.Response | null = null;
+        try {
+          response = await request(app)
+            .get('/candidates/00000000-0000-0000-0000-000000000001');
+        } catch (err) {
+          networkError = err;
+        }
+
+        expect(networkError).toBeNull();
+        expect(response).not.toBeNull();
+        expect(response!.status).toBe(500);
+        expect(response!.headers['content-type']).toMatch(/json/);
+        expect(response!.body).toEqual({ error: 'Internal server error' });
+      } finally {
+        process.env.DATABASE_URL = originalDbUrl;
+        console.error = originalError;
+        poolAny.query = originalQuery;
+      }
     });
   });
 });

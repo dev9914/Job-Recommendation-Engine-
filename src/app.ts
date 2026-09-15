@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 
 import { candidateRouter } from './routes/candidate-routes';
 import { jobRouter } from './routes/job-routes';
@@ -14,5 +14,10 @@ app.get('/health', (_request, response) => {
 
 app.use('/candidates', candidateRouter);
 app.use('/jobs', jobRouter);
+
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('Internal server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 export { app };
