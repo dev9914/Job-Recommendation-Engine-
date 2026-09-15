@@ -25,6 +25,10 @@ export class JobRepository {
   getAll(): Job[] {
     return Array.from(this.jobs.values());
   }
+
+  clear(): void {
+    this.jobs.clear();
+  }
 }
 
 export const jobRepository = new JobRepository();

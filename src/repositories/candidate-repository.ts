@@ -25,6 +25,10 @@ export class CandidateRepository {
   getAll(): Candidate[] {
     return Array.from(this.candidates.values());
   }
+
+  clear(): void {
+    this.candidates.clear();
+  }
 }
 
 export const candidateRepository = new CandidateRepository();
