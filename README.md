@@ -25,6 +25,28 @@ A transparent, rule-based Job Recommendation Engine & REST API built to match ca
 npm install
 ```
 
+### Configure environment and database
+
+Copy the example environment file and adjust values as needed:
+
+```bash
+cp .env.example .env          # Windows: copy .env.example .env
+```
+
+Start a local PostgreSQL instance. You can either:
+
+- **Use Docker (recommended):**
+  ```bash
+  docker compose up -d postgres
+  ```
+- **Or point `DATABASE_URL` in `.env` at any existing local Postgres instance.**
+
+Once PostgreSQL is ready, run the database migrations:
+
+```bash
+npm run migrate
+```
+
 ### Start the dev server (with hot reload)
 
 ```bash
